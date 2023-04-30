@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vector>
+#include <thread>
 #include <memory>
 
 #include "Serializable.h"
@@ -24,25 +25,25 @@
  *  +-------------------+
  *
  */
-class ChatMessage: public Serializable
+class ChatMessage : public Serializable
 {
 public:
     static const size_t MESSAGE_SIZE = sizeof(char) * 88 + sizeof(uint8_t);
 
     enum MessageType
     {
-        LOGIN   = 0,
+        LOGIN = 0,
         MESSAGE = 1,
-        LOGOUT  = 2
+        LOGOUT = 2
     };
 
-    ChatMessage(){};
+    ChatMessage() {};
 
-    ChatMessage(const std::string& n, const std::string& m):nick(n),message(m){};
+    ChatMessage(const std::string& n, const std::string& m) :nick(n), message(m) {};
 
     void to_bin();
 
-    int from_bin(char * bobj);
+    int from_bin(char* bobj);
 
     uint8_t type;
 
@@ -59,7 +60,7 @@ public:
 class ChatServer
 {
 public:
-    ChatServer(const char * s, const char * p): socket(s, p)
+    ChatServer(const char* s, const char* p) : socket(s, p)
     {
         socket.bind();
     };
@@ -81,6 +82,7 @@ private:
      * Socket del servidor
      */
     Socket socket;
+
 };
 
 // -----------------------------------------------------------------------------
@@ -97,8 +99,8 @@ public:
      * @param p puerto del servidor
      * @param n nick del usuario
      */
-    ChatClient(const char * s, const char * p, const char * n):socket(s, p),
-        nick(n){};
+    ChatClient(const char* s, const char* p, const char* n) :socket(s, p),
+        nick(n) {};
 
     /**
      *  Envía el mensaje de login al servidor
@@ -133,5 +135,8 @@ private:
      * Nick del usuario
      */
     std::string nick;
+
+    std::vector<std::thread> threads;
+
 };
 

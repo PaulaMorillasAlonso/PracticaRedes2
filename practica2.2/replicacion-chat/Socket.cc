@@ -3,6 +3,7 @@
 #include "Serializable.h"
 #include "Socket.h"
 
+
 Socket::Socket(const char * address, const char * port):sd(-1)
 {
     //Construir un socket de tipo AF_INET y SOCK_DGRAM usando getaddrinfo.
@@ -30,10 +31,17 @@ Socket::Socket(const char * address, const char * port):sd(-1)
         std::cout<< "No se pudo crear el socket" << "\n";
         return;
     }
+
     sd=sock_udp;
     sa=*result->ai_addr;
     sa_len=result->ai_addrlen;
     
+    //int bindE = bind();
+    //if (bindE < 0){
+    //    std::cout << "No se pudo establecer la conexion\n";
+    //    return;
+    //}
+
 }
 
 int Socket::recv(Serializable &obj, Socket * &sock)

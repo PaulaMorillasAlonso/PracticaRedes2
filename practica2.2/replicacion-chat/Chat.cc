@@ -52,6 +52,7 @@ void ChatServer::do_messages()
         // Leer mensaje del cliente
         Socket *client_socket;
         ChatMessage msg;
+        
         char buffer[ChatMessage::MESSAGE_SIZE];
 
         int client_fd =socket.recv(msg,client_socket);
@@ -92,16 +93,30 @@ void ChatServer::do_messages()
 void ChatClient::login()
 {
     std::string msg;
-
+    std::cout<<"Introduce nick: \n";
+    std::cin>>nick;
     ChatMessage em(nick, msg);
     em.type = ChatMessage::LOGIN;
 
     socket.send(em, socket);
+
+    threads.push_back(std::thread(input_thread));
+    threads.push_back(std::thread(net_thread));
+    
 }
 
 void ChatClient::logout()
 {
-    // Completar
+    std::string msg;
+
+    ChatMessage em(nick, msg);
+    em.type = ChatMessage::LOGOUT;
+
+    socket.send(em, socket);
+    
+    for(auto& thread : threads){
+        thread.join();
+    }
 }
 
 void ChatClient::input_thread()
@@ -110,6 +125,15 @@ void ChatClient::input_thread()
     {
         // Leer stdin con std::getline
         // Enviar al servidor usando socket
+        char buffer[ChatMessage::MESSAGE_SIZE];
+        std::cin.getline(buffer, ChatMessage::MESSAGE_SIZE);
+        if(strcmp(buffer, "q") == 0){
+            logout();            
+        }
+        else{
+            ChatMessage msg(nick,buffer);
+            socket.send(msg,socket);
+        }
     }
 }
 
@@ -119,6 +143,11 @@ void ChatClient::net_thread()
     {
         //Recibir Mensajes de red
         //Mostrar en pantalla el mensaje de la forma "nick: mensaje"
+        ChatMessage msg;
+        socket.recv(msg);
+        char * buffer;
+        msg.from_bin(buffer);
+        std::cout<<msg.nick<<": "<<buffer<<"\n";
     }
 }
 
