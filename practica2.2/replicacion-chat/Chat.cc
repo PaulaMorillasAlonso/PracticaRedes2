@@ -1,5 +1,5 @@
 #include "Chat.h"
-
+#include <string>
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
@@ -10,28 +10,31 @@ void ChatMessage::to_bin()
     memset(_data, 0, MESSAGE_SIZE);
 
     //Serializar los campos type, nick y message en el buffer _data
-    char *tmp=_data;
-    memcpy(tmp,&type,sizeof(uint8_t));
-    tmp+=sizeof(uint8_t);
-    memcpy(tmp,&nick ,sizeof(char)*8); 
-    tmp+=sizeof(char)*8;
-    memcpy(tmp,&message ,sizeof(char)*80); 
+    char* tmp = _data;
+    memcpy(tmp, &type, sizeof(uint8_t));
+    tmp += sizeof(uint8_t);
+    memcpy(tmp, nick.c_str(), sizeof(char) * 8);
+    tmp += sizeof(char) * 8;
+    memcpy(tmp, message.c_str(), sizeof(char) * 80);
 
 }
 
-int ChatMessage::from_bin(char * bobj)
+int ChatMessage::from_bin(char* bobj)
 {
     alloc_data(MESSAGE_SIZE);
-
-    memcpy(static_cast<void *>(_data), bobj, MESSAGE_SIZE);
+    memcpy(static_cast<void*>(_data), bobj, MESSAGE_SIZE);
+    char* tmp = _data;
 
     //Reconstruir la clase usando el buffer _data
-    memcpy(&type,_data ,sizeof(uint8_t));
-    _data+=sizeof(uint8_t);
-    memcpy(&nick,_data ,sizeof(char)*8);//x es el destino
-    _data+=sizeof(char)*8;
-    memcpy(&message,_data ,sizeof(char)*80);
-    
+    memcpy(&type, tmp, sizeof(uint8_t));
+    tmp += sizeof(uint8_t);
+    char nick_buff[9] = { 0 };
+    memcpy(nick_buff, tmp, sizeof(char) * 8);
+    nick = std::string(nick_buff);
+    tmp += sizeof(char) * 8;
+    char m_buff[81] = { 0 };
+    memcpy(m_buff, tmp, sizeof(char) * 80);
+    message = std::string(m_buff);
     return 0;
 }
 
@@ -48,42 +51,46 @@ void ChatServer::do_messages()
          * para añadirlo al vector
          */
 
-        //Recibir Mensajes en y en función del tipo de mensaje
-        // Leer mensaje del cliente
-        Socket *client_socket;
+         //Recibir Mensajes en y en función del tipo de mensaje
+         // Leer mensaje del cliente
+         //Socket *client_socket;
+         //ChatMessage msg;
+
+        Socket* client_socket;
         ChatMessage msg;
-        
-        char buffer[ChatMessage::MESSAGE_SIZE];
 
-        int client_fd =socket.recv(msg,client_socket);
-        if (client_fd == -1) {
-            std::cout<<"Error aceptando la conexion";
-        }
-        
-        if(msg.type==ChatMessage::LOGIN){  // - LOGIN: Añadir al vector clients
+        int client_fd = socket.recv(msg, client_socket);
+
+
+        if (msg.type == ChatMessage::LOGIN) {  // - LOGIN: Añadir al vector clients
+
             std::cout << msg.nick << " LOGIN\n";
-            std::unique_ptr<Socket> new_client (client_socket);
-            clients.push_back(std::move(new_client));
-        }
-        else if(msg.type==ChatMessage::LOGOUT){ // - LOGOUT: Eliminar del vector clients
-            std::cout << msg.nick << " LOGOUT\n";
-            auto it = clients.begin();
-            while(it != clients.end() && !(*(*it).get() == *client_socket )) it++; //avanza hasta encontrar el cliente que quiere borrar
-            if(it!=clients.end()) clients.erase(it);
-        }
-        else{ // - MESSAGE: Reenviar el mensaje a todos los clientes (menos el emisor)
-            
-            std::cout << msg.nick << " MESSAGE\n";
-            msg.from_bin(buffer);
-            //Envia mensaje a los clientes
-            msg.to_bin();
+            if (client_socket != nullptr) {
 
-            for (const auto& c : clients) {
-                if (!(*c == *client_socket)) {
-                    c->send(msg,*c);
+                std::unique_ptr<Socket> new_client(client_socket);
+                clients.push_back(std::move(new_client));
+            }
+        }
+        else if (msg.type == ChatMessage::LOGOUT) { // - LOGOUT: Eliminar del vector clients
+            std::cout << msg.nick << " LOGOUT\n";
+
+            for (int i = 0; i < clients.size(); ++i) {
+                if ((*clients[i]) == (*client_socket)) {
+                    clients.erase(clients.begin() + i);
                 }
             }
         }
+        else { // - MESSAGE: Reenviar el mensaje a todos los clientes (menos el emisor)
+
+            std::cout << msg.nick << " MESSAGE\n";
+
+            for (int i = 0; i < clients.size(); ++i) {
+                if (!((*clients[i]) == (*client_socket))) {
+                    socket.send(msg, *clients[i]);
+                }
+            }
+        }
+
     }
 }
 
@@ -93,16 +100,11 @@ void ChatServer::do_messages()
 void ChatClient::login()
 {
     std::string msg;
-    std::cout<<"Introduce nick: \n";
-    std::cin>>nick;
     ChatMessage em(nick, msg);
     em.type = ChatMessage::LOGIN;
 
     socket.send(em, socket);
 
-    threads.push_back(std::thread(input_thread));
-    threads.push_back(std::thread(net_thread));
-    
 }
 
 void ChatClient::logout()
@@ -113,41 +115,35 @@ void ChatClient::logout()
     em.type = ChatMessage::LOGOUT;
 
     socket.send(em, socket);
-    
-    for(auto& thread : threads){
-        thread.join();
-    }
+
 }
 
 void ChatClient::input_thread()
 {
     while (true)
     {
-        // Leer stdin con std::getline
-        // Enviar al servidor usando socket
         char buffer[ChatMessage::MESSAGE_SIZE];
         std::cin.getline(buffer, ChatMessage::MESSAGE_SIZE);
-        if(strcmp(buffer, "q") == 0){
-            logout();            
+        if (strcmp(buffer, "q") == 0) {
+            logout();
+            break;
         }
-        else{
-            ChatMessage msg(nick,buffer);
-            socket.send(msg,socket);
+        else {
+            ChatMessage msg(nick, buffer);
+            msg.type = ChatMessage::MESSAGE;
+            socket.send(msg, socket);
         }
     }
 }
 
 void ChatClient::net_thread()
 {
-    while(true)
+    while (true)
     {
-        //Recibir Mensajes de red
-        //Mostrar en pantalla el mensaje de la forma "nick: mensaje"
         ChatMessage msg;
         socket.recv(msg);
-        char * buffer;
-        msg.from_bin(buffer);
-        std::cout<<msg.nick<<": "<<buffer<<"\n";
+        std::cout << msg.nick << ": " << msg.message << "\n";
+
     }
 }
 
